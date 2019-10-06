@@ -1,0 +1,46 @@
+service: example
+
+plugins:
+  - serverless-step-functions
+  - serverless-iam-roles-per-function
+
+provider:
+  name: aws
+  runtime: nodejs10.x
+
+resources:
+  Resources:
+    ExampleRequestQueue:
+      Type: AWS::SQS::Queue
+
+stepFunctions:
+  stateMachines:
+    example:
+      name: ExampleStateMachine
+      definition:
+        StartAt: PublishAndWait
+        States:
+          PublishAndWait:
+            Type: Task
+            Resource: arn:aws:states:::sqs:sendMessage.waitForTaskToken
+            Parameters:
+              QueueUrl:
+                Ref: ExampleRequestQueue
+              MessageBody:
+                input.$: "$"
+                taskToken.$: "$$.Task.Token"
+            End: true
+
+functions:
+  worker:
+    handler: worker.handler
+    iamRoleStatements:
+      - Effect: "Allow"
+        Action:
+          - states:SendTaskSuccess
+          - states:SendTaskFailure
+        Resource: "*"
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [ ExampleRequestQueue, Arn ]
